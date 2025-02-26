@@ -92,7 +92,8 @@ def download_youtube_audio():
 
         ydl_opts = {
             "format": "bestaudio/best",
-            "outtmpl": output_path.replace(".mp3", ""),  # Prevent .mp3.mp3 issue
+            "outtmpl": output_path.replace(".mp3", ""),
+            "cookiefile": "cookies.txt",  # Path to the cookies file
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
