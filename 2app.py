@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 import ffmpeg
 import uuid
 import logging
+from yt_dlp import YoutubeDL  # For YouTube audio download
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
@@ -12,7 +13,7 @@ os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
 logging.basicConfig(level=logging.DEBUG)
 
-# 🔥 Ensure FFmpeg runs from your copied folder
+# Ensure FFmpeg runs from your copied folder
 FFMPEG_DIR = os.path.abspath("ffmpeg/bin/")  # Adjust folder name if needed
 os.environ["PATH"] = FFMPEG_DIR + os.pathsep + os.environ["PATH"]
 
@@ -77,6 +78,38 @@ def download_file(filename):
     if not os.path.exists(file_path):
         return jsonify({"error": "File not found"}), 404
     return send_from_directory(PROCESSED_FOLDER, filename, as_attachment=True)
+
+@app.route("/download_youtube_audio", methods=["POST"])
+def download_youtube_audio():
+    data = request.json
+    url = data.get("url")
+    if not url:
+        return jsonify({"error": "YouTube URL is required"}), 400
+
+    try:
+        unique_filename = generate_unique_filename("mp3")
+        output_path = os.path.join(PROCESSED_FOLDER, unique_filename)
+
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": output_path.replace(".mp3", ""),  # Prevent .mp3.mp3 issue
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }],
+        }
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+        # Rename if extra .mp3 is added
+        if os.path.exists(output_path + ".mp3"):
+            os.rename(output_path + ".mp3", output_path)
+
+        return jsonify({"message": "YouTube audio downloaded", "filename": unique_filename})
+    except Exception as e:
+        logging.error(f"Error downloading YouTube audio: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

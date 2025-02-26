@@ -4,17 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xeno Player - Live Pitch Adjuster</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-        .container { display: flex; justify-content: center; gap: 50px; }
-        .column { width: 40%; padding: 20px; border: 1px solid gray; border-radius: 10px; }
-        input, button { margin: 10px; padding: 10px; }
-        .seek-slider { width: 100%; margin-top: 10px; }
-        .error { color: red; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <h1>Xeno Player</h1>
+<body class="dark-mode">
+    <h1>YT Pitch Shifter</h1>
+
+    <!-- Dark/Light Mode Toggle -->
+    <button id="theme-toggle" class="theme-toggle">🌙</button>
 
     <div class="container">
         <!-- File Upload Section -->
@@ -25,6 +21,7 @@
             <br><br>
             <label>Pitch (Semitones): 
                 <input type="range" id="pitchControl" min="-12" max="12" step="0.1" value="0" oninput="adjustLivePitch()">
+                <span id="pitchValue">0</span>
             </label>
             <br><br>
             <button onclick="startLiveAudio()">Play</button>
@@ -33,12 +30,40 @@
             <button onclick="processAndDownload()">Process & Download</button>
             <div id="uploadError" class="error"></div>
         </div>
+
+        <!-- YouTube Audio Downloader -->
+        <div class="column">
+            <h3>YouTube Audio Downloader</h3>
+            <input type="text" id="youtubeUrl" placeholder="Paste YouTube URL here">
+            <br><br>
+            <button onclick="downloadYouTubeAudio()">Download Audio</button>
+            <div id="youtubeError" class="error"></div>
+        </div>
     </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy;Made by Joshikaran 2023 <strong>Xeno Corp</strong>. All rights reserved.</p>
+    </footer>
 
     <script>
         let uploadedFilename = "";
         let audioContext, source, pitchNode, audioBuffer;
         let isPlaying = false;
+
+        // Display semitones
+        document.getElementById("pitchControl").oninput = function () {
+            document.getElementById("pitchValue").textContent = this.value;
+            adjustLivePitch();
+        };
+
+        // Dark/Light Mode Toggle
+        const themeToggle = document.getElementById("theme-toggle");
+        themeToggle.addEventListener("click", () => {
+            document.body.classList.toggle("dark-mode");
+            document.body.classList.toggle("light-mode");
+            themeToggle.textContent = document.body.classList.contains("dark-mode") ? "🌙" : "☀️";
+        });
 
         async function uploadFile() {
             let file = document.getElementById('fileInput').files[0];
@@ -120,6 +145,26 @@
             if (!response.ok) {
                 let errorData = await response.json();
                 showError(`Error: ${errorData.error}`, "uploadError");
+                return;
+            }
+
+            let result = await response.json();
+            window.location.href = `/download/${result.filename}`;
+        }
+
+        async function downloadYouTubeAudio() {
+            let youtubeUrl = document.getElementById("youtubeUrl").value;
+            if (!youtubeUrl) return showError("Please enter a YouTube URL", "youtubeError");
+
+            let response = await fetch("/download_youtube_audio", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: youtubeUrl }),
+            });
+
+            if (!response.ok) {
+                let errorData = await response.json();
+                showError(`Error: ${errorData.error}`, "youtubeError");
                 return;
             }
 
