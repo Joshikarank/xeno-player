@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xeno Player - Live Pitch & Speed</title>
+</head>
+<body>
+    <h1>Xeno Player</h1>
+    <input type="file" id="fileInput">
+    <button onclick="loadAudio()">Load</button>
+    
+    <label>Pitch (Semitones): <input type="range" id="pitchControl" min="-12" max="12" step="0.1" value="0"></label>
+    <label>Speed: <input type="range" id="speedControl" min="0.5" max="2" step="0.01" value="1"></label>
+
+    <button onclick="uploadFile()">Upload & Process</button>
+    <button onclick="downloadProcessed()">Download Processed</button>
+
+    <audio id="audioPlayer" controls></audio>
+
+    <script>
+        let audioContext, source, pitchShiftNode, gainNode, audioBuffer;
+        let audioPlayer = document.getElementById("audioPlayer");
+
+        async function loadAudio() {
+            let file = document.getElementById('fileInput').files[0];
+            if (!file) return alert("Select an audio file");
+
+            let reader = new FileReader();
+            reader.onload = async function (e) {
+                let arrayBuffer = await fetch(e.target.result).then(res => res.arrayBuffer());
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                playAudio();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function playAudio() {
+            if (source) source.stop();
+
+            source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+
+            let pitchControl = document.getElementById("pitchControl");
+            let speedControl = document.getElementById("speedControl");
+
+            let pitchFactor = Math.pow(2, pitchControl.value / 12); // Convert semitones to frequency multiplier
+            source.playbackRate.value = speedControl.value * pitchFactor; // Maintain time-stretching
+
+            gainNode = audioContext.createGain();
+            source.connect(gainNode).connect(audioContext.destination);
+            source.start();
+
+            pitchControl.oninput = () => updatePitchSpeed();
+            speedControl.oninput = () => updatePitchSpeed();
+        }
+
+        function updatePitchSpeed() {
+            if (!source) return;
+            let pitchFactor = Math.pow(2, document.getElementById("pitchControl").value / 12);
+            source.playbackRate.value = document.getElementById("speedControl").value * pitchFactor;
+        }
+
+        async function uploadFile() {
+            let file = document.getElementById('fileInput').files[0];
+            let formData = new FormData();
+            formData.append('file', file);
+
+            let response = await fetch('/upload', { method: 'POST', body: formData });
+            let result = await response.json();
+            alert(result.message);
+        }
+
+        function downloadProcessed() {
+            let filename = docu ment.getElementById('fileInput').files[0].name;
+            window.location.href = `/download/${filename}`;
+        }
+    </script>
+</body>
+</html>

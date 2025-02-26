@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xeno Player - Live Pitch Adjuster</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        .container { display: flex; justify-content: center; gap: 50px; }
+        .column { width: 40%; padding: 20px; border: 1px solid gray; border-radius: 10px; }
+        input, button { margin: 10px; padding: 10px; }
+        .seek-slider { width: 100%; margin-top: 10px; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Xeno Player</h1>
+
+    <div class="container">
+        <!-- File Upload Section -->
+        <div class="column">
+            <h3>Upload Audio File</h3>
+            <input type="file" id="fileInput" accept=".mp3,.wav,.ogg,.m4a">
+            <button onclick="uploadFile()">Upload</button>
+            <br><br>
+            <label>Pitch (Semitones): 
+                <input type="range" id="pitchControl" min="-12" max="12" step="0.1" value="0" oninput="adjustLivePitch()">
+            </label>
+            <br><br>
+            <button onclick="startLiveAudio()">Play</button>
+            <button onclick="stopLiveAudio()">Stop</button>
+            <br><br>
+            <button onclick="processAndDownload()">Process & Download</button>
+            <div id="uploadError" class="error"></div>
+        </div>
+    </div>
+
+    <script>
+        let uploadedFilename = "";
+        let audioContext, source, pitchNode, audioBuffer;
+        let isPlaying = false;
+
+        async function uploadFile() {
+            let file = document.getElementById('fileInput').files[0];
+            if (!file) return showError("No file selected", "uploadError");
+
+            let formData = new FormData();
+            formData.append("file", file);
+
+            let response = await fetch("/upload", { method: "POST", body: formData });
+
+            if (!response.ok) {
+                let errorData = await response.json();
+                showError(`Error: ${errorData.error}`, "uploadError");
+                return;
+            }
+
+            let result = await response.json();
+            uploadedFilename = result.filename;
+            showError("File uploaded successfully", "uploadError");
+
+            loadAudio(file);
+        }
+
+        function loadAudio(file) {
+            let reader = new FileReader();
+            reader.onload = async function (e) {
+                let arrayBuffer = await fetch(e.target.result).then(res => res.arrayBuffer());
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                showError("Audio ready for playback", "uploadError");
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function startLiveAudio() {
+            if (!audioBuffer) return showError("Upload and load an audio file first", "uploadError");
+            if (isPlaying) return;
+
+            source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            pitchNode = audioContext.createGain();
+            source.connect(pitchNode);
+            pitchNode.connect(audioContext.destination);
+
+            adjustLivePitch();
+            source.start();
+            isPlaying = true;
+
+            source.onended = () => {
+                isPlaying = false;
+            };
+        }
+
+        function stopLiveAudio() {
+            if (source) {
+                source.stop();
+                isPlaying = false;
+            }
+        }
+
+        function adjustLivePitch() {
+            if (!source) return;
+            let pitch = parseFloat(document.getElementById("pitchControl").value);
+            let pitchFactor = Math.pow(2, pitch / 12);
+            source.playbackRate.value = pitchFactor;
+        }
+
+        async function processAndDownload() {
+            if (!uploadedFilename) return showError("Upload a file first", "uploadError");
+
+            let pitch = parseFloat(document.getElementById("pitchControl").value);
+
+            let response = await fetch("/process_audio", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename: uploadedFilename, pitch }),
+            });
+
+            if (!response.ok) {
+                let errorData = await response.json();
+                showError(`Error: ${errorData.error}`, "uploadError");
+                return;
+            }
+
+            let result = await response.json();
+            window.location.href = `/download/${result.filename}`;
+        }
+
+        function showError(message, elementId) {
+            document.getElementById(elementId).textContent = message;
+        }
+    </script>
+</body>
+</html>
